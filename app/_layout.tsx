@@ -9,7 +9,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 
 import { AppErrorBoundary } from '@/components/layout/AppErrorBoundary';
-import { AuthProvider } from '@/lib/auth/AuthProvider';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -24,10 +23,8 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppErrorBoundary>
-          <AuthProvider>
-            <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }} />
-          </AuthProvider>
+          <StatusBar style="auto" />
+          <Stack screenOptions={{ headerShown: false }} />
         </AppErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>

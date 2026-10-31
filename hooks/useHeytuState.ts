@@ -5,8 +5,7 @@ import { achievements } from '@/data/achievements';
 import { readStorage, writeStorage } from '@/lib/storage';
 import type { Mission, UserData } from '@/types/domain';
 
-const GUEST_STORAGE_KEY = '@heytu/user-v1';
-const GUEST_CLAIMED_KEY = '@heytu/guest-claimed-v1';
+const STORAGE_KEY = '@heytu/user-v1';
 
 export function createInitialUser(): UserData {
   return {
@@ -51,13 +50,8 @@ function withAchievement(user: UserData, id: string): UserData {
   return { ...user, achievements: [...user.achievements, id] };
 }
 
-export function useHeytuState(
-  accountId: string | null = null,
-  allowGuestMigration = true,
-) {
-  const storageKey = accountId
-    ? `@heytu/user-v1:${accountId}`
-    : GUEST_STORAGE_KEY;
+export function useHeytuState() {
+  const storageKey = STORAGE_KEY;
   const [user, setUser] = useState<UserData>(createInitialUser);
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -73,30 +67,7 @@ export function useHeytuState(
           setUser(normalizeUser(saved));
           return;
         }
-        if (!accountId) {
-          setUser(createInitialUser());
-          return;
-        }
-        if (!allowGuestMigration) {
-          setUser(createInitialUser());
-          return;
-        }
-        return Promise.all([
-          readStorage<UserData>(GUEST_STORAGE_KEY),
-          readStorage<string>(GUEST_CLAIMED_KEY),
-        ]).then(([guest, claimedBy]) => {
-          if (!mounted) return;
-          if (guest && !claimedBy) {
-            setUser(normalizeUser(guest));
-            return writeStorage(GUEST_CLAIMED_KEY, accountId).catch(
-              (error: unknown) => {
-                if (__DEV__)
-                  console.error('Could not mark guest data as claimed', error);
-              },
-            );
-          }
-          setUser(createInitialUser());
-        });
+        setUser(createInitialUser());
       })
       .catch((error: unknown) => {
         if (mounted) {
@@ -113,7 +84,7 @@ export function useHeytuState(
     return () => {
       mounted = false;
     };
-  }, [storageKey, accountId, allowGuestMigration]);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!hydrated) return undefined;
@@ -263,26 +234,6 @@ export function useHeytuState(
       setUser((current) => ({ ...current, name: name.trim() || current.name })),
     [],
   );
-  const restoreProfilePreferences = useCallback(
-    (
-      name: string | null,
-      interests: UserData['interests'],
-      preferences: UserData['preferences'],
-    ) => {
-      setUser((current) => {
-        if (current.onboardingComplete) return current;
-        return {
-          ...current,
-          name: name?.trim() || current.name,
-          interests,
-          preferences,
-          onboardingComplete: true,
-          tutorialComplete: true,
-        };
-      });
-    },
-    [],
-  );
   const reset = useCallback(() => {
     setStorageError(null);
     setUser(createInitialUser());
@@ -309,7 +260,6 @@ export function useHeytuState(
     completeChallengeDay,
     addCreatedMission,
     updateName,
-    restoreProfilePreferences,
     reset,
   };
 }

@@ -23,7 +23,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppImage } from '@/components/ui/AppImage';
-import { AuthScreen } from '@/components/auth/AuthScreen';
 
 import { achievements } from '@/data/achievements';
 import {
@@ -36,11 +35,6 @@ import {
   preferenceLabels,
 } from '@/data/catalog';
 import { useHeytuState } from '@/hooks/useHeytuState';
-import { useAuth } from '@/lib/auth/AuthProvider';
-import {
-  saveProfileDisplayName,
-  saveProfilePreferences,
-} from '@/lib/auth/profile';
 import { selectionHaptic, successHaptic } from '@/lib/haptics';
 import { recommendMissions, searchMissions } from '@/lib/recommendations';
 import { colors } from '@/constants/Colors';
@@ -58,7 +52,6 @@ type Page =
   | 'preferences'
   | 'personalizing'
   | 'tutorial'
-  | 'auth'
   | 'app';
 type Tab = 'Explore' | 'Activity' | 'Profile';
 
@@ -658,15 +651,7 @@ function PersonalizationHero({
 }
 
 export default function Home() {
-  const auth = useAuth();
-  const accountId = auth.user?.id ?? null;
-  const state = useHeytuState(
-    accountId,
-    auth.status === 'authenticated' && !auth.profile?.onboarding_complete,
-  );
-  const localUser = state.user;
-  const stateHydrated = state.hydrated;
-  const restoreProfilePreferences = state.restoreProfilePreferences;
+  const state = useHeytuState();
   const insets = useSafeAreaInsets();
   const [page, setPage] = useState<Page>('welcome');
   const [tab, setTab] = useState<Tab>('Explore');
@@ -687,43 +672,6 @@ export default function Home() {
   const [createOpen, setCreateOpen] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [toast, setToast] = useState('');
-
-  useEffect(() => {
-    if (
-      auth.status !== 'authenticated' ||
-      !stateHydrated ||
-      !auth.profile ||
-      !auth.user
-    )
-      return;
-    if (auth.profile.onboarding_complete && !localUser.onboardingComplete) {
-      restoreProfilePreferences(
-        auth.profile.display_name,
-        auth.profile.interests,
-        auth.profile.preferences,
-      );
-      return;
-    }
-    if (localUser.onboardingComplete) {
-      void saveProfilePreferences(auth.user.id, {
-        interests: localUser.interests,
-        preferences: localUser.preferences,
-        onboarding_complete: true,
-      }).catch((error: unknown) => {
-        if (__DEV__)
-          console.error('Could not sync HEYTU profile preferences', error);
-      });
-    }
-  }, [
-    auth.status,
-    auth.profile,
-    auth.user,
-    stateHydrated,
-    localUser.onboardingComplete,
-    localUser.interests,
-    localUser.preferences,
-    restoreProfilePreferences,
-  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -828,11 +776,7 @@ export default function Home() {
     setTab('Activity');
   };
 
-  if (
-    !state.hydrated ||
-    auth.status === 'loading' ||
-    (auth.profile?.onboarding_complete && !state.user.onboardingComplete)
-  )
+  if (!state.hydrated)
     return (
       <View
         style={{
@@ -859,21 +803,9 @@ export default function Home() {
           page === 'welcome'
         ? 'app'
         : page;
-  const protectedPage =
-    currentPage === 'app' && auth.status === 'unauthenticated'
-      ? 'auth'
-      : currentPage;
   const pageContent = (
     <>
-      {protectedPage === 'auth' && (
-        <AuthScreen
-          onSuccess={() => {
-            setPage('app');
-            setTab('Explore');
-          }}
-        />
-      )}
-      {protectedPage === 'welcome' && (
+      {currentPage === 'welcome' && (
         <View
           style={{
             flex: 1,
@@ -999,7 +931,7 @@ export default function Home() {
           </View>
         </View>
       )}
-      {protectedPage === 'interests' && (
+      {currentPage === 'interests' && (
         <View
           style={{
             flex: 1,
@@ -1039,7 +971,7 @@ export default function Home() {
           />
         </View>
       )}
-      {protectedPage === 'preferences' && (
+      {currentPage === 'preferences' && (
         <View
           style={{
             flex: 1,
@@ -1139,10 +1071,10 @@ export default function Home() {
           />
         </View>
       )}
-      {protectedPage === 'personalizing' && (
+      {currentPage === 'personalizing' && (
         <PersonalizationHero interests={selectedInterests} />
       )}
-      {protectedPage === 'tutorial' && (
+      {currentPage === 'tutorial' && (
         <View
           style={{
             flex: 1,
@@ -1263,7 +1195,7 @@ export default function Home() {
   );
 
   const searchScreen = searching && !detail;
-  const appScreen = protectedPage === 'app';
+  const appScreen = currentPage === 'app';
   const topInset = insets.top;
   return (
     <View
@@ -2118,27 +2050,12 @@ export default function Home() {
                       name={state.user.name || 'H'}
                       color={colors.coral}
                       size={78}
-                      uri={auth.profile?.avatar_url}
                     />
                     <TextInput
                       value={nameDraft || state.user.name}
                       onChangeText={(t) => {
                         setNameDraft(t);
                         state.updateName(t);
-                      }}
-                      onEndEditing={(event) => {
-                        if (!auth.user) return;
-                        const displayName = event.nativeEvent.text.trim();
-                        if (!displayName) return;
-                        void saveProfileDisplayName(auth.user.id, displayName)
-                          .then(() => auth.refreshProfile())
-                          .catch((error: unknown) => {
-                            if (__DEV__)
-                              console.error(
-                                'Could not update profile name',
-                                error,
-                              );
-                          });
                       }}
                       placeholder="Tu nombre"
                       style={{
@@ -2394,31 +2311,6 @@ export default function Home() {
                       </View>
                     ))}
                   </View>
-                  {auth.user ? (
-                    <View style={{ marginTop: 22, gap: 10 }}>
-                      <Text
-                        style={{
-                          color: colors.muted,
-                          fontSize: 13,
-                          textAlign: 'center',
-                        }}
-                      >
-                        {auth.profile?.email ?? auth.user.email ?? ''}
-                      </Text>
-                      <Action
-                        label="Cerrar sesión"
-                        tone="ink"
-                        onPress={() => void auth.signOut()}
-                      />
-                      {auth.authError ? (
-                        <Text
-                          style={{ color: colors.coral, textAlign: 'center' }}
-                        >
-                          {auth.authError}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
                   {__DEV__ && (
                     <View
                       style={{
